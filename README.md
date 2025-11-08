@@ -58,7 +58,7 @@ INSTALL_DIR="${1:-${HOME}/depthai_install}"
 DEPTHAI_REPO="https://github.com/luxonis/depthai-core.git"
 DEPTHAI_BRANCH="main"
 BUILD_DIR="${HOME}"
-WORKSPACE_DIR="${BUILD_DIR}/depthai-core"
+WORKSPACE_DIR="${BUILD_DIR}/depthai-core" 
 
 # Build configuration
 NUM_CORES=$(nproc)
@@ -129,7 +129,7 @@ command_exists() {
 cleanup_on_error() {
     print_error "Installation failed. Cleaning up..."
     cd "${HOME}"
-    # Note: Not removing BUILD_DIR to allow debugging
+    # Note: Not removing  to allow debugging
     print_status "Build directory preserved at: ${BUILD_DIR}"
     exit 1
 }
@@ -196,9 +196,14 @@ fi
 print_status "Cleaning up old depthai-core installations..."
 
 # Remove old build directories
-if [ -d "${BUILD_DIR}" ]; then
-    print_status "Removing old build directory: ${BUILD_DIR}"
-    rm -rf "${BUILD_DIR}"
+if [ -d "${WORKSPACE_DIR}" ]; then
+    print_status "Removing old build directory: ${WORKSPACE_DIR}"
+    read -p "Remove ${WORKSPACE_DIR}? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        rm -rf "${WORKSPACE_DIR}"
+        print_success "Removed: ${WORKSPACE_DIR}"
+    fi
 fi
 
 # Find and remove old depthai-core folders in common locations
@@ -408,7 +413,7 @@ fi
 print_status "Setting up Python environment..."
 
 # Create virtual environment for Python bindings
-VENV_DIR="${BUILD_DIR}/venv"
+VENV_DIR="${WORKSPACE_DIR}/venv"
 python3 -m venv "${VENV_DIR}" || error_exit "Failed to create virtual environment"
 
 # Activate virtual environment
