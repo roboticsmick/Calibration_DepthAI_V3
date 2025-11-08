@@ -39,6 +39,11 @@ vim install_depthai_v3.sh
 #   - Uses system OpenCV (from ROS2/Jetson SDK)
 #   - Estimated build time: 25-40 minutes
 #
+# Directory structure:
+#   ~/depthai-core/              - Source code and build
+#   ~/depthai-core/venv/         - Python virtual environment
+#   ~/depthai_install/           - C++ library installation
+#
 # Author: Generated for Jetson Orin NX Platform
 # Date: 2025-11-08
 ################################################################################
@@ -58,7 +63,7 @@ INSTALL_DIR="${1:-${HOME}/depthai_install}"
 DEPTHAI_REPO="https://github.com/luxonis/depthai-core.git"
 DEPTHAI_BRANCH="main"
 BUILD_DIR="${HOME}"
-WORKSPACE_DIR="${BUILD_DIR}/depthai-core" 
+WORKSPACE_DIR="${BUILD_DIR}/depthai-core"
 
 # Build configuration
 NUM_CORES=$(nproc)
@@ -129,8 +134,7 @@ command_exists() {
 cleanup_on_error() {
     print_error "Installation failed. Cleaning up..."
     cd "${HOME}"
-    # Note: Not removing  to allow debugging
-    print_status "Build directory preserved at: ${BUILD_DIR}"
+    print_status "Build directory preserved at: ${WORKSPACE_DIR}"
     exit 1
 }
 
@@ -143,7 +147,7 @@ trap cleanup_on_error ERR
 
 print_status "Starting DepthAI installation for Jetson Orin NX"
 print_status "Installation directory: ${INSTALL_DIR}"
-print_status "Build directory: ${BUILD_DIR}"
+print_status "Workspace directory: ${WORKSPACE_DIR}"
 
 # Check for sudo privileges
 if ! sudo -n true 2>/dev/null; then
@@ -193,23 +197,26 @@ fi
 # Cleanup Old Installations
 ################################################################################
 
-print_status "Cleaning up old depthai-core installations..."
+print_status "Checking for old depthai-core installations..."
 
-# Remove old build directories
+# Remove old workspace if it exists
 if [ -d "${WORKSPACE_DIR}" ]; then
-    print_status "Removing old build directory: ${WORKSPACE_DIR}"
-    read -p "Remove ${WORKSPACE_DIR}? (y/n) " -n 1 -r
+    print_warning "Found existing depthai-core at: ${WORKSPACE_DIR}"
+    read -p "Remove and rebuild? (y/n) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         rm -rf "${WORKSPACE_DIR}"
         print_success "Removed: ${WORKSPACE_DIR}"
+    else
+        print_error "Cannot proceed with existing directory"
+        exit 1
     fi
 fi
 
-# Find and remove old depthai-core folders in common locations
+# Find and remove old depthai installations in other locations
 OLD_LOCATIONS=(
-    "${HOME}/depthai-core"
     "${HOME}/depthai"
+    "${HOME}/depthai_build"
     "/usr/local/depthai-core"
     "/opt/depthai-core"
 )
@@ -220,7 +227,7 @@ for location in "${OLD_LOCATIONS[@]}"; do
         read -p "Remove this directory? (y/n) " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
-            sudo rm -rf "$location"
+            rm -rf "$location"
             print_success "Removed: $location"
         fi
     fi
@@ -318,17 +325,15 @@ if ! command_exists cmake || [ "$(printf '%s\n' "$REQUIRED_CMAKE" "$CMAKE_VERSIO
     sudo apt-get install -y cmake || error_exit "Failed to install CMake"
 fi
 
-print_success "All system dependencies installed"
+print_success "All system dependencies checked"
 
 ################################################################################
 # Clone DepthAI Repository
 ################################################################################
 
-print_status "Creating build directory..."
-mkdir -p "${BUILD_DIR}"
+print_status "Cloning depthai-core repository to ${WORKSPACE_DIR}..."
 cd "${BUILD_DIR}"
 
-print_status "Cloning depthai-core repository..."
 git clone --recursive --depth 1 --branch "${DEPTHAI_BRANCH}" "${DEPTHAI_REPO}" || \
     error_exit "Failed to clone repository"
 
@@ -378,7 +383,7 @@ print_status "This will take approximately 30-50 minutes with ${SAFE_JOBS} jobs"
 
 cmake --build . --parallel "${SAFE_JOBS}" || {
     print_error "Build failed. If this was due to memory, try:"
-    echo "  cd ~/depthai_build/depthai-core/build"
+    echo "  cd ${WORKSPACE_DIR}/build"
     echo "  cmake --build . --parallel 1"
     exit 1
 }
@@ -422,24 +427,47 @@ source "${VENV_DIR}/bin/activate" || error_exit "Failed to activate virtual envi
 print_status "Upgrading pip..."
 pip install --upgrade pip setuptools wheel || error_exit "Failed to upgrade pip"
 
-print_status "Building Python bindings..."
+################################################################################
+# Install Python Dependencies and DepthAI Package
+################################################################################
+
+print_status "Installing Python dependencies and DepthAI package..."
 cd "${WORKSPACE_DIR}"
 
-# Build Python bindings with pip
-pip install . || error_exit "Python bindings installation failed"
-
-print_success "Python bindings installed successfully"
-
-################################################################################
-# Install Python Examples Dependencies (Optional)
-################################################################################
-
-print_status "Installing Python example dependencies..."
-
 if [ -f "examples/python/install_requirements.py" ]; then
-    python3 examples/python/install_requirements.py || \
-        print_warning "Failed to install example requirements (non-critical)"
+    python3 examples/python/install_requirements.py || error_exit "Failed to install Python dependencies"
+    print_success "Python dependencies and DepthAI package installed"
+else
+    error_exit "install_requirements.py not found in examples/python/"
 fi
+
+# Test Python import
+print_status "Testing Python installation..."
+DEPTHAI_VERSION=$(python3 -c "import depthai as dai; print(dai.__version__)" 2>/dev/null || echo "unknown")
+if [ "$DEPTHAI_VERSION" != "unknown" ]; then
+    print_success "DepthAI Python package working - version: ${DEPTHAI_VERSION}"
+else
+    print_error "Python import test failed"
+fi
+
+################################################################################
+# Configure OpenBLAS for ARM (Jetson-specific)
+################################################################################
+
+print_status "Configuring OpenBLAS for ARM architecture..."
+
+# Check if already in .bashrc
+if ! grep -q "OPENBLAS_CORETYPE" ~/.bashrc; then
+    echo "" >> ~/.bashrc
+    echo "# OpenBLAS configuration for ARM (prevents illegal instruction errors)" >> ~/.bashrc
+    echo "export OPENBLAS_CORETYPE=ARMV8" >> ~/.bashrc
+    print_success "OpenBLAS configuration added to ~/.bashrc"
+else
+    print_status "OpenBLAS already configured in ~/.bashrc"
+fi
+
+# Set for current session
+export OPENBLAS_CORETYPE=ARMV8
 
 ################################################################################
 # Post-Installation Configuration
@@ -459,6 +487,15 @@ EOF
     print_success "USB udev rules installed"
 else
     print_status "USB udev rules already exist"
+fi
+
+# Add user to plugdev group if not already
+if ! groups | grep -q plugdev; then
+    print_status "Adding user to plugdev group..."
+    sudo usermod -a -G plugdev $USER
+    print_warning "Added to plugdev group - logout/login required for USB access"
+else
+    print_status "User already in plugdev group"
 fi
 
 ################################################################################
@@ -481,6 +518,9 @@ export CMAKE_PREFIX_PATH="\${DEPTHAI_INSTALL_DIR}:\${CMAKE_PREFIX_PATH}"
 # Python virtual environment
 export DEPTHAI_VENV="${VENV_DIR}"
 
+# OpenBLAS for ARM
+export OPENBLAS_CORETYPE=ARMV8
+
 # Activate Python virtual environment
 alias activate_depthai="source \${DEPTHAI_VENV}/bin/activate"
 
@@ -497,41 +537,54 @@ chmod +x "${ENV_SCRIPT}"
 # Installation Summary
 ################################################################################
 
+# Deactivate venv for summary
+deactivate 2>/dev/null || true
+
 print_success "================================"
 print_success "DepthAI Installation Complete!"
 print_success "================================"
 echo ""
 print_status "Installation Summary:"
+echo "  - Workspace: ${WORKSPACE_DIR}"
 echo "  - C++ Library: ${INSTALL_DIR}"
 echo "  - Python Environment: ${VENV_DIR}"
-echo "  - Build Directory: ${BUILD_DIR}"
 echo "  - Environment Script: ${ENV_SCRIPT}"
 echo ""
 print_status "Build Configuration:"
 echo "  - vcpkg: Internal dependencies only (lz4, protobuf, etc.)"
 echo "  - OpenCV: System library (from ROS2/Jetson)"
 echo "  - USB Support: Enabled"
+echo "  - OpenBLAS: Configured for ARM"
 echo ""
-print_status "Next Steps:"
-echo "  1. Source the environment script:"
-echo "     source ${ENV_SCRIPT}"
+print_status "IMPORTANT - USB Permissions:"
+if ! groups | grep -q plugdev; then
+    print_warning "You were added to the plugdev group"
+    print_warning "You MUST logout/login (or reboot) for USB device access"
+fi
+echo "  1. Logout and login (or reboot)"
+echo "  2. Unplug and replug your OAK device"
 echo ""
-echo "  2. Activate Python environment:"
-echo "     source ${VENV_DIR}/bin/activate"
+print_status "Usage:"
+echo "  1. Activate Python environment:"
+echo "     cd ${WORKSPACE_DIR}"
+echo "     source venv/bin/activate"
 echo ""
-echo "  3. Test the installation:"
-echo "     python -c 'import depthai as dai; print(dai.__version__)'"
+echo "  2. Test Python:"
+echo "     python3 -c 'import depthai as dai; print(dai.__version__)'"
 echo ""
-echo "  4. Run C++ examples (if built):"
-echo "     ${BUILD_DIR}/depthai-core/build/examples/*"
+echo "  3. Run examples:"
+echo "     python3 examples/python/rgb_preview.py"
 echo ""
-print_status "For permanent environment setup, add this to your ~/.bashrc:"
+echo "  4. C++ examples:"
+echo "     ${WORKSPACE_DIR}/build/examples/cpp/Camera/camera_all"
+echo ""
+print_status "For permanent environment setup, add to ~/.bashrc:"
 echo "  source ${ENV_SCRIPT}"
 echo ""
+if ! groups | grep -q plugdev; then
+    print_warning "REMEMBER: Logout/login required for USB access!"
+fi
 print_success "Installation completed successfully!"
-
-# Deactivate virtual environment
-deactivate 2>/dev/null || true
 
 exit 0
 ```
