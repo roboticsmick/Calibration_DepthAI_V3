@@ -17,13 +17,13 @@ import depthai_calibration.calibration_utils as calibUtils
 
 """
 Example:
-python3 ssh_camera_filter_control_calibrate.py -s 4.0 -brd OAK-FFC-3P.json -nx 17 -ny 9 --ssh-preview
+python3 calibrate_depthai_v3.py -s 4.0 -brd OAK-FFC-3P.json -nx 12 -ny 9 --ssh-preview
 
 No scaling
-python3 ssh_camera_filter_control_calibrate.py -s 4.0 -brd OAK-FFC-3P.json -nx 17 -ny 9
+python3 calibrate_depthai_v3.py -s 4.0 -brd OAK-FFC-3P.json -nx 12 -ny 9
 
 Calibrate on saved images from dataset folder:
-python3 ssh_camera_filter_control_calibrate.py -s 4.0 -brd OAK-FFC-3P.json -m process -nx 17 -ny 9
+python3 calibrate_depthai_v3.py -s 4.0 -brd OAK-FFC-3P.json -m process -nx 12 -ny 9
 """
 
 font = cv2.FONT_HERSHEY_SIMPLEX
