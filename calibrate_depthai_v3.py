@@ -16,14 +16,23 @@ import numpy as np
 import depthai_calibration.calibration_utils as calibUtils
 
 """
-Example:
-python3 calibrate_depthai_v3.py -s 4.0 -brd OAK-FFC-3P.json -nx 12 -ny 9 --ssh-preview
+# Example:
+python3 calibrate_depthai_v3.py -s 2.44 -brd OAK-FFC-3P-HQ113.json -nx 12 -ny 9 --ssh-preview
 
-No scaling
-python3 calibrate_depthai_v3.py -s 4.0 -brd OAK-FFC-3P.json -nx 12 -ny 9
+# No scaling
+python3 calibrate_depthai_v3.py -s 2.44 -brd OAK-FFC-3P.json -nx 12 -ny 9
 
-Calibrate on saved images from dataset folder:
-python3 calibrate_depthai_v3.py -s 4.0 -brd OAK-FFC-3P.json -m process -nx 12 -ny 9
+# Calibrate on saved images from dataset folder:
+python3 calibrate_depthai_v3.py -s 2.44 -brd OAK-FFC-3P-HQ113.json -m process -nx 12 -ny 9
+
+# Debugging visualisation mode (shows first image with full analysis):
+python3 calibrate_depthai_v3.py -s 2.44 -brd OAK-FFC-3P-HQ113.json -m process -nx 12 -ny 9 --debug-vis
+
+# Live capture with detection overlay (marker IDs & pose on preview - slower):
+python3 calibrate_depthai_v3.py -s 2.44 -brd OAK-FFC-3P-HQ113.json -nx 12 -ny 9 --show-detection-overlay
+
+# Fast SSH mode (minimal overlay for bandwidth):
+python3 calibrate_depthai_v3.py -s 2.44 -brd OAK-FFC-3P-HQ113.json -nx 12 -ny 9 --ssh-preview
 """
 
 font = cv2.FONT_HERSHEY_SIMPLEX
@@ -380,6 +389,18 @@ def parse_args():
         "--ssh-preview",
         action="store_true",
         help="Enable a fast, low-quality preview optimized for SSH, showing only marker counts.",
+    )
+    parser.add_argument(
+        "--debug-vis",
+        "--debug-visualization",
+        dest="debugVisualization",
+        action="store_true",
+        help="Enable detailed visualization of detected corners, IDs, and pose estimation at each calibration stage.",
+    )
+    parser.add_argument(
+        "--show-detection-overlay",
+        action="store_true",
+        help="Show marker IDs and pose estimation on live capture preview (slower, not recommended for SSH). Default: Off.",
     )
     # =================================================================
     options = parser.parse_args()
@@ -767,7 +788,9 @@ class Main:
         """Draw detected charuco corners directly on the frame using modern OpenCV API"""
         # If corners not provided, detect them
         if charuco_corners is None or charuco_ids is None:
-            charuco_corners, charuco_ids, _, _ = self.charuco_detector.detectBoard(frame)
+            charuco_corners, charuco_ids, _, _ = self.charuco_detector.detectBoard(
+                frame
+            )
 
         # Draw the detected corners
         if charuco_ids is not None and len(charuco_ids) > 0:
@@ -775,6 +798,147 @@ class Main:
                 frame, charuco_corners, charuco_ids, green
             )
         return frame
+
+    def draw_detection_overlay(self, frame, camera_name=None, intrinsics=None, dist_coeff=None):
+        """
+        Draw comprehensive detection overlay on live preview including:
+        - ArUco markers with IDs
+        - Charuco corners with IDs (sampled for readability)
+        - Board pose with coordinate axes (if intrinsics available)
+        - Detection statistics
+        """
+        overlay_frame = frame.copy()
+
+        # Detect markers and corners
+        marker_corners, marker_ids, charuco_corners, charuco_ids = (
+            self.detect_markers_corners(frame)
+        )
+
+        # Draw ArUco markers with IDs
+        if marker_corners is not None and len(marker_corners) > 0:
+            cv2.aruco.drawDetectedMarkers(overlay_frame, marker_corners, marker_ids)
+
+            # Label markers with IDs (every 3rd marker to avoid clutter)
+            for i in range(0, len(marker_corners), 3):
+                corner = marker_corners[i]
+                marker_id = marker_ids[i]
+                # Get center of marker
+                center = corner[0].mean(axis=0).astype(int)
+                cv2.putText(
+                    overlay_frame,
+                    f"M{marker_id[0]}",
+                    tuple(center),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.4,
+                    (0, 0, 255),
+                    1,
+                )
+
+        # Draw charuco corners
+        if charuco_corners is not None and len(charuco_corners) > 0:
+            cv2.aruco.drawDetectedCornersCharuco(
+                overlay_frame, charuco_corners, charuco_ids, green
+            )
+
+            # Label corner IDs (sample every 8th corner to avoid clutter)
+            for i in range(0, min(len(charuco_corners), 40), 8):
+                corner_pos = charuco_corners[i][0].astype(int)
+                corner_id = charuco_ids[i][0]
+                cv2.putText(
+                    overlay_frame,
+                    f"{corner_id}",
+                    tuple(corner_pos + [8, 8]),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.35,
+                    (255, 255, 0),
+                    1,
+                )
+
+            # Estimate and draw pose if intrinsics available
+            if (intrinsics is not None and dist_coeff is not None and
+                len(charuco_corners) >= 4):
+                try:
+                    # Get 3D object points for detected corners
+                    board_corners_3d = self.charuco_board.getChessboardCorners()
+                    obj_points = np.array(
+                        [board_corners_3d[charuco_ids[i][0]] for i in range(len(charuco_ids))],
+                        dtype=np.float32,
+                    )
+
+                    # Estimate pose
+                    success, rvec, tvec = cv2.solvePnP(
+                        obj_points,
+                        charuco_corners,
+                        intrinsics,
+                        dist_coeff,
+                        flags=cv2.SOLVEPNP_ITERATIVE,
+                    )
+
+                    if success:
+                        # Draw coordinate axes
+                        axis_length = self.args.squareSizeCm * 2
+                        cv2.drawFrameAxes(
+                            overlay_frame, intrinsics, dist_coeff, rvec, tvec, axis_length, 2
+                        )
+
+                        # Display distance to board
+                        distance = np.linalg.norm(tvec)
+                        cv2.putText(
+                            overlay_frame,
+                            f"Dist: {distance:.1f}cm",
+                            (10, 25),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.6,
+                            (0, 255, 255),
+                            2,
+                        )
+                except Exception:
+                    pass  # Silently skip pose estimation errors in live preview
+
+        # Display detection statistics
+        expected_corners = (self.args.squaresX - 1) * (self.args.squaresY - 1)
+        num_corners = len(charuco_corners) if charuco_corners is not None else 0
+        num_markers = len(marker_corners) if marker_corners is not None else 0
+
+        # Build status text
+        status_y = overlay_frame.shape[0] - 60
+        status_text = f"{num_corners}/{expected_corners} corners"
+        if camera_name:
+            status_text = f"{camera_name}: {status_text}"
+
+        # Draw semi-transparent background for text
+        text_bg_height = 50
+        overlay_bg = overlay_frame.copy()
+        cv2.rectangle(
+            overlay_bg,
+            (0, overlay_frame.shape[0] - text_bg_height),
+            (overlay_frame.shape[1], overlay_frame.shape[0]),
+            (0, 0, 0),
+            -1,
+        )
+        cv2.addWeighted(overlay_bg, 0.3, overlay_frame, 0.7, 0, overlay_frame)
+
+        # Draw text
+        cv2.putText(
+            overlay_frame,
+            status_text,
+            (10, status_y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 255),
+            1,
+        )
+        cv2.putText(
+            overlay_frame,
+            f"{num_markers} markers | Board: {self.args.squaresX}x{self.args.squaresY}",
+            (10, status_y + 22),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.4,
+            (200, 200, 200),
+            1,
+        )
+
+        return overlay_frame
 
     def draw_corners(self, frame, displayframe, color):
         _, _, charuco_corners, _ = self.detect_markers_corners(frame)
@@ -807,6 +971,197 @@ class Main:
                 if left_corner[0][0] - right_corner[0][0] < 0:
                     return False
         return True
+
+    def visualize_charuco_detection(
+        self, frame, camera_name, intrinsics=None, dist_coeff=None, image_index=None
+    ):
+        """
+        Comprehensive visualization of charuco detection including:
+        - Detected ArUco markers with IDs
+        - Interpolated charuco corners with IDs
+        - Board pose (if intrinsics provided)
+        - Detection statistics
+        """
+        # Make a copy to draw on
+        debug_frame = frame.copy()
+        if len(debug_frame.shape) == 2:  # Grayscale
+            debug_frame = cv2.cvtColor(debug_frame, cv2.COLOR_GRAY2BGR)
+
+        # Detect markers and corners
+        marker_corners, marker_ids, charuco_corners, charuco_ids = (
+            self.detect_markers_corners(frame)
+        )
+
+        print(f"\n{'='*60}")
+        print(f"DEBUG VISUALIZATION - Camera: {camera_name}")
+        if image_index is not None:
+            print(f"Image Index: {image_index}")
+        print(f"{'='*60}")
+        print(f"Frame shape: {frame.shape}")
+        print(f"Frame dtype: {frame.dtype}")
+
+        # Draw ArUco markers
+        if marker_corners is not None and len(marker_corners) > 0:
+            print(f"✓ Detected {len(marker_corners)} ArUco markers")
+            cv2.aruco.drawDetectedMarkers(debug_frame, marker_corners, marker_ids)
+
+            # Label each marker with its ID
+            for i, (corner, marker_id) in enumerate(zip(marker_corners, marker_ids)):
+                # Get center of marker
+                center = corner[0].mean(axis=0).astype(int)
+                cv2.putText(
+                    debug_frame,
+                    f"M{marker_id[0]}",
+                    tuple(center),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 0, 255),
+                    2,
+                )
+            if marker_ids is not None:
+                print(f"  Marker IDs: {marker_ids.flatten()[:20].tolist()}")
+        else:
+            print("✗ No ArUco markers detected")
+
+        # Draw charuco corners
+        if charuco_corners is not None and len(charuco_corners) > 0:
+            print(f"✓ Detected {len(charuco_corners)} charuco corners")
+            cv2.aruco.drawDetectedCornersCharuco(
+                debug_frame, charuco_corners, charuco_ids, (0, 255, 0)
+            )
+
+            # Label some corners with their IDs (not all to avoid clutter)
+            num_labels = min(15, len(charuco_corners))
+            for i in range(num_labels):
+                corner_pos = charuco_corners[i][0].astype(int)
+                corner_id = charuco_ids[i][0]
+                cv2.putText(
+                    debug_frame,
+                    f"{corner_id}",
+                    tuple(corner_pos + [10, 10]),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.4,
+                    (255, 255, 0),
+                    1,
+                )
+
+            if charuco_ids is not None:
+                print(f"  Corner IDs (first 20): {charuco_ids.flatten()[:20].tolist()}")
+                print(f"  Corner ID range: {charuco_ids.min()} to {charuco_ids.max()}")
+
+            # Calculate expected vs detected
+            expected_corners = (self.args.squaresX - 1) * (self.args.squaresY - 1)
+            detection_rate = (len(charuco_corners) / expected_corners) * 100
+            print(
+                f"  Detection rate: {len(charuco_corners)}/{expected_corners} ({detection_rate:.1f}%)"
+            )
+
+            # Check corner coordinate ranges
+            corners_array = charuco_corners.reshape(-1, 2)
+            print(
+                f"  Corner X range: {corners_array[:, 0].min():.1f} to {corners_array[:, 0].max():.1f}"
+            )
+            print(
+                f"  Corner Y range: {corners_array[:, 1].min():.1f} to {corners_array[:, 1].max():.1f}"
+            )
+        else:
+            print("✗ No charuco corners detected")
+
+        # Estimate pose if we have intrinsics
+        if (
+            intrinsics is not None
+            and dist_coeff is not None
+            and charuco_corners is not None
+            and len(charuco_corners) >= 4
+        ):
+            try:
+                # Get 3D object points for detected corners
+                board_corners_3d = self.charuco_board.getChessboardCorners()
+                obj_points = np.array(
+                    [
+                        board_corners_3d[charuco_ids[i][0]]
+                        for i in range(len(charuco_ids))
+                    ],
+                    dtype=np.float32,
+                )
+
+                # Estimate pose
+                success, rvec, tvec = cv2.solvePnP(
+                    obj_points,
+                    charuco_corners,
+                    intrinsics,
+                    dist_coeff,
+                    flags=cv2.SOLVEPNP_ITERATIVE,
+                )
+
+                if success:
+                    print(f"\n✓ Pose estimation successful:")
+                    print(f"  Rotation vector: {rvec.flatten()}")
+                    print(f"  Translation vector: {tvec.flatten()}")
+                    print(
+                        f"  Distance to board: {np.linalg.norm(tvec):.2f} {self.args.squareSizeCm} units"
+                    )
+
+                    # Draw coordinate axes on the board
+                    axis_length = self.args.squareSizeCm * 3
+                    cv2.drawFrameAxes(
+                        debug_frame, intrinsics, dist_coeff, rvec, tvec, axis_length, 3
+                    )
+
+                    # Add text overlay with pose info
+                    cv2.putText(
+                        debug_frame,
+                        f"Dist: {np.linalg.norm(tvec):.1f}cm",
+                        (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        (255, 255, 255),
+                        2,
+                    )
+            except Exception as e:
+                print(f"✗ Pose estimation failed: {e}")
+
+        # Add info overlay
+        info_y = debug_frame.shape[0] - 60
+        cv2.putText(
+            debug_frame,
+            f"{camera_name}: {len(charuco_corners) if charuco_corners is not None else 0} corners",
+            (10, info_y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 255, 255),
+            2,
+        )
+        cv2.putText(
+            debug_frame,
+            f"Board: {self.args.squaresX}x{self.args.squaresY}, Square: {self.args.squareSizeCm}cm",
+            (10, info_y + 25),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 255),
+            1,
+        )
+
+        # Resize for display if too large
+        max_display_width = 1920
+        if debug_frame.shape[1] > max_display_width:
+            scale = max_display_width / debug_frame.shape[1]
+            new_width = int(debug_frame.shape[1] * scale)
+            new_height = int(debug_frame.shape[0] * scale)
+            debug_frame = cv2.resize(debug_frame, (new_width, new_height))
+
+        # Display
+        window_name = f"Debug: {camera_name}" + (
+            f" - Image {image_index}" if image_index is not None else ""
+        )
+        cv2.imshow(window_name, debug_frame)
+        print(f"\nDisplaying visualization. Press any key to continue...")
+        cv2.waitKey(0)
+        cv2.destroyWindow(window_name)
+
+        print(f"{'='*60}\n")
+
+        return debug_frame
 
     def create_pipeline(self):
         pipeline = dai.Pipeline()
@@ -1347,15 +1702,25 @@ class Main:
                     cv2.putText(preview_frame_small, text, (10, 30), font, 1, color, 2)
                     display_frames[name] = preview_frame_small
                 else:
-                    frame_with_markers = self.draw_markers(
-                        bgr_frame, charuco_corners, charuco_ids
-                    )
-                    text = f"{name}: {detected_count}/{total_corners}"
-                    color = green if detected_count >= min_required else red
-                    cv2.putText(
-                        frame_with_markers, text, (20, 60), font, 2, (0, 0, 0), 6
-                    )
-                    cv2.putText(frame_with_markers, text, (20, 60), font, 2, color, 3)
+                    # Use enhanced overlay if flag is set, otherwise basic markers
+                    if self.args.show_detection_overlay:
+                        # Enhanced overlay with IDs and pose (slower)
+                        frame_with_markers = self.draw_detection_overlay(
+                            bgr_frame, camera_name=name
+                        )
+                    else:
+                        # Basic markers only (faster, default)
+                        frame_with_markers = self.draw_markers(
+                            bgr_frame, charuco_corners, charuco_ids
+                        )
+                        # Add simple text overlay
+                        text = f"{name}: {detected_count}/{total_corners}"
+                        color = green if detected_count >= min_required else red
+                        cv2.putText(
+                            frame_with_markers, text, (20, 60), font, 2, (0, 0, 0), 6
+                        )
+                        cv2.putText(frame_with_markers, text, (20, 60), font, 2, color, 3)
+
                     scaled_frame = cv2.resize(
                         frame_with_markers,
                         (0, 0),
@@ -1607,6 +1972,44 @@ class Main:
 
     def calibrate(self):
         print("Starting image processing")
+
+        # Debug visualization: Show first image from each camera
+        if self.args.debugVisualization:
+            print("\n" + "=" * 80)
+            print("DEBUG VISUALIZATION MODE ENABLED")
+            print("=" * 80)
+            print("Visualizing first captured image from each camera...")
+            print("This helps verify that charuco detection is working correctly.\n")
+
+            import glob
+
+            for cam_id in self.board_config["cameras"]:
+                cam_info = self.board_config["cameras"][cam_id]
+                if cam_info["name"] not in self.args.disableCamera:
+                    images_path = f"{self.dataset_path}/{cam_info['name']}"
+                    image_files = sorted(glob.glob(f"{images_path}/*"))
+
+                    if image_files:
+                        print(f"\nCamera: {cam_info['name']}")
+                        print(f"Found {len(image_files)} images")
+                        print(f"Visualizing: {image_files[0]}")
+
+                        frame = cv2.imread(image_files[0])
+                        if frame is not None:
+                            self.visualize_charuco_detection(
+                                frame,
+                                cam_info["name"],
+                                intrinsics=None,  # No intrinsics yet on first image
+                                dist_coeff=None,
+                                image_index=0,
+                            )
+                    else:
+                        print(f"\n⚠ No images found for camera: {cam_info['name']}")
+
+            print("\n" + "=" * 80)
+            print("Starting calibration processing...")
+            print("=" * 80 + "\n")
+
         stereo_calib = calibUtils.StereoCalibration(
             self.args.traceLevel, self.args.outputScaleFactor, self.args.disableCamera
         )
@@ -1644,7 +2047,37 @@ class Main:
                 target_file.write(f"Number of squaresY: {self.args.squaresY}\n")
 
                 error_text = []
-                for camera, cam_info in result_config["cameras"].items():
+                # IMPORTANT: Process cameras in specific order to match expected EEPROM format
+                # Order should be: [reference, right_stereo, left_stereo] to match existing calibration
+                # This produces socket order [0, 2, 1] for OAK-FFC-3P
+
+                # Build custom sort order based on stereo configuration
+                stereo_left = result_config.get("stereo_config", {}).get("left_cam")
+                stereo_right = result_config.get("stereo_config", {}).get("right_cam")
+
+                def camera_sort_key(item):
+                    cam_name = item[0]
+                    socket_num = stringToCam[cam_name].value
+
+                    # Reference camera (typically socket 0) goes first
+                    if cam_name not in [stereo_left, stereo_right]:
+                        return (0, socket_num)
+                    # Right stereo camera goes second
+                    elif cam_name == stereo_right:
+                        return (1, socket_num)
+                    # Left stereo camera goes third
+                    else:  # cam_name == stereo_left
+                        return (2, socket_num)
+
+                sorted_cameras = sorted(result_config["cameras"].items(), key=camera_sort_key)
+
+                print("\nCamera processing order:")
+                for camera, cam_info in sorted_cameras:
+                    if cam_info["name"] not in self.args.disableCamera:
+                        socket = stringToCam[camera].value
+                        print(f"  {camera} (socket {socket}): {cam_info['name']}")
+
+                for camera, cam_info in sorted_cameras:
                     if cam_info["name"] in self.args.disableCamera:
                         continue
 
@@ -1668,14 +2101,19 @@ class Main:
                         f"{cam_info['name']}-reprojection: {cam_info['reprojection_error']:.6f}\n"
                     )
 
+                    # Ensure distortion coefficients are properly formatted (flatten if needed)
+                    dist_coeff = np.array(cam_info["dist_coeff"]).flatten()
                     calibration_handler.setDistortionCoefficients(
-                        stringToCam[camera], cam_info["dist_coeff"]
+                        stringToCam[camera], dist_coeff
                     )
+
+                    # Ensure intrinsics matrix is properly formatted
+                    intrinsics = np.array(cam_info["intrinsics"])
                     calibration_handler.setCameraIntrinsics(
                         stringToCam[camera],
-                        cam_info["intrinsics"],
-                        cam_info["size"][0],
-                        cam_info["size"][1],
+                        intrinsics,
+                        int(cam_info["size"][0]),
+                        int(cam_info["size"][1]),
                     )
                     calibration_handler.setFov(stringToCam[camera], cam_info["hfov"])
 
@@ -1696,6 +2134,18 @@ class Main:
                             f"{cam_info['name']} and {to_cam_name} epipolar_error: {epipolar_error:.6f}\n"
                         )
 
+                        # Ensure extrinsics are properly formatted as numpy arrays
+                        rotation_matrix = np.array(cam_info["extrinsics"]["rotation_matrix"], dtype=np.float64)
+
+                        # Translation: check if it's already an array or a dict
+                        trans_data = cam_info["extrinsics"]["translation"]
+                        if isinstance(trans_data, dict):
+                            # Dict format from JSON: {"x": ..., "y": ..., "z": ...}
+                            translation = np.array([trans_data["x"], trans_data["y"], trans_data["z"]], dtype=np.float64)
+                        else:
+                            # Already an array from calibration_utils
+                            translation = np.array(trans_data, dtype=np.float64).flatten()
+
                         specTranslation = np.array(
                             [
                                 cam_info["extrinsics"]["specTranslation"]["x"],
@@ -1707,8 +2157,8 @@ class Main:
                         calibration_handler.setCameraExtrinsics(
                             stringToCam[camera],
                             stringToCam[cam_info["extrinsics"]["to_cam"]],
-                            cam_info["extrinsics"]["rotation_matrix"],
-                            cam_info["extrinsics"]["translation"],
+                            rotation_matrix,
+                            translation,
                             specTranslation,
                         )
 
@@ -1737,7 +2187,22 @@ class Main:
                 if self.args.saveCalibPath:
                     calibration_handler.eepromToJsonFile(self.args.saveCalibPath)
 
-                status = self.device.flashCalibration(calibration_handler)
+                # Attempt to flash calibration with detailed error reporting
+                # NOTE: In DepthAI V3, flashCalibration() may return None on success
+                # instead of True. We check for exceptions to determine success.
+                try:
+                    print("Calling device.flashCalibration()...")
+                    result = self.device.flashCalibration(calibration_handler)
+                    print(f"flashCalibration returned: {result} (type: {type(result).__name__})")
+                    # V3 API returns None on success, so we assume success if no exception
+                    status = True
+                except Exception as e:
+                    print(f"Exception during flashCalibration: {e}")
+                    print(f"Exception type: {type(e).__name__}")
+                    import traceback
+                    traceback.print_exc()
+                    status = False
+
                 if status:
                     print("EEPROM written successfully.")
                     resImage = create_blank(900, 512, rgb_color=green)
@@ -1810,7 +2275,9 @@ class Main:
                         dev_name = self.device.getDeviceName()
                         print(f"Device name: {dev_name}")
                         filtered_parts = [
-                            p for p in dev_name.split("-") if p not in ("AF", "FF", "9782")
+                            p
+                            for p in dev_name.split("-")
+                            if p not in ("AF", "FF", "9782")
                         ]
                         self.board_name = "-".join(filtered_parts)
                         board_path = (
