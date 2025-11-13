@@ -7,6 +7,8 @@ Calibration script for the OAK-FCC-3P board using DepthAI V3.
     ```bash
     vim install_depthai_v3.sh
     ```
+
+    Paste in the installation script:
     
     ```bash
     #!/bin/bash
@@ -595,7 +597,7 @@ Calibration script for the OAK-FCC-3P board using DepthAI V3.
     ./install_depthai_v3.sh
     ```
 
-2. Clone the calibration script to the python examples folder
+1. Clone the calibration script to the python examples folder
 
     ```bash
     cd ~/depthai-core
@@ -604,9 +606,9 @@ Calibration script for the OAK-FCC-3P board using DepthAI V3.
     git clone https://github.com/roboticsmick/Calibration_DepthAI_V3.git
     ```
 
-3. Update the JSON file with the camera position and camera fov parameters.
+2. Update the JSON file with the camera position and camera fov parameters.
 
-4. Create a charuco calibration board
+3. Create a charuco calibration board
 
     ```bash
     python3 generate_charuco_board.py -nx 12 -ny 9 -s 4.0 -ms 3.0 -o charuco_board.pdf
