@@ -619,8 +619,7 @@ This calibration script updates the depthAI V2 calibration script and helper fil
 
     * 2 x OV9782 mono global shutter cameras with a M12 75° HFOV lens, and 1 x IMX577 with a M12 lens with a 113° FOV and a 2.7mm focal length. The position of the cameras is shown below.
 
-    <img width="948" height="568" alt="image" src="https://github.com/user-attachments/assets/fb78beda-791d-4511-b2fe-eacf37451a49" />
-
+    <img width="916" height="513" alt="image" src="https://github.com/user-attachments/assets/ffbfacd3-4b91-46d0-adf9-a6e21c1b9067" />
 
     ```json
     {
@@ -685,7 +684,9 @@ This calibration script updates the depthAI V2 calibration script and helper fil
     ```
 
     * 1 x IMX577 with a C mount lens with a 4mm UC Series Fixed Focal Length Lens with the aperture set to F2.0. We have interpolated a HFOV of 83.6° for the IMX577 sensor size.
-
+  
+    <img width="871" height="627" alt="image" src="https://github.com/user-attachments/assets/df10a42d-bb6d-4212-9319-441910753996" />
+    
     ```json
     {
         "board_config": {
