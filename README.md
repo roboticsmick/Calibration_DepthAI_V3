@@ -611,6 +611,9 @@ Calibration script for the OAK-FCC-3P board using DepthAI V3.
     ```bash
     python3 generate_charuco_board.py -nx 12 -ny 9 -s 4.0 -ms 3.0 -o charuco_board.pdf
     ```
+
+    <img width="919" height="686" alt="Screenshot from 2025-11-13 10-13-28" src="https://github.com/user-attachments/assets/6ce71041-a088-413c-a28b-e45aa21828fb" />
+
    
 6. Update the camera json for your camera layout. There are two example camera json files:
     1. 2 x OV9782 mono global shutter cameras with a M12 75° HFOV lens, and 1 x IMX577 with a M12 lens with a 113° FOV and a 2.7mm focal length:
