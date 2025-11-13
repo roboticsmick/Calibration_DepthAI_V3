@@ -617,7 +617,10 @@ This calibration script updates the depthAI V2 calibration script and helper fil
    
 4. Update the camera json for your camera layout. There are two example camera json files for different camerra setups:
 
-    1. 2 x OV9782 mono global shutter cameras with a M12 75° HFOV lens, and 1 x IMX577 with a M12 lens with a 113° FOV and a 2.7mm focal length. The Stereo cameras are positioned 7.01cm above the the RGB camera. The RGB camera is 
+    1. 2 x OV9782 mono global shutter cameras with a M12 75° HFOV lens, and 1 x IMX577 with a M12 lens with a 113° FOV and a 2.7mm focal length. The position of the cameras is shown below.
+
+    <img width="948" height="568" alt="image" src="https://github.com/user-attachments/assets/fb78beda-791d-4511-b2fe-eacf37451a49" />
+
 
     ```json
     {
