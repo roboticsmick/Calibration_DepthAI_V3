@@ -1,6 +1,6 @@
 # Calibration_DepthAI_V3
 
-Calibration script for the OAK-FCC-3P board using DepthAI V3. 
+This calibration script updates the depthAI V2 calibration script and helper files to work with DepthaAI V3. It has been specifically updated to work with the OAK-FFC-3P board, so other OAK-FFC boards may require additional updating. 
 
 1. Install DepthAI-core V3
 
@@ -597,7 +597,7 @@ Calibration script for the OAK-FCC-3P board using DepthAI V3.
     ./install_depthai_v3.sh
     ```
 
-1. Clone the calibration script to the python examples folder
+2. Clone the calibration script to the python examples folder
 
     ```bash
     cd ~/depthai-core
@@ -605,8 +605,6 @@ Calibration script for the OAK-FCC-3P board using DepthAI V3.
     cd ~/depthai-core/examples/python
     git clone https://github.com/roboticsmick/Calibration_DepthAI_V3.git
     ```
-
-2. Update the JSON file with the camera position and camera fov parameters.
 
 3. Create a charuco calibration board
 
@@ -617,8 +615,9 @@ Calibration script for the OAK-FCC-3P board using DepthAI V3.
     <img width="919" height="686" alt="Screenshot from 2025-11-13 10-13-28" src="https://github.com/user-attachments/assets/6ce71041-a088-413c-a28b-e45aa21828fb" />
 
    
-6. Update the camera json for your camera layout. There are two example camera json files:
-    1. 2 x OV9782 mono global shutter cameras with a M12 75° HFOV lens, and 1 x IMX577 with a M12 lens with a 113° FOV and a 2.7mm focal length:
+4. Update the camera json for your camera layout. There are two example camera json files for different camerra setups:
+
+    1. 2 x OV9782 mono global shutter cameras with a M12 75° HFOV lens, and 1 x IMX577 with a M12 lens with a 113° FOV and a 2.7mm focal length. The Stereo cameras are positioned 7.01cm above the the RGB camera. The RGB camera is 
 
     ```json
     {
@@ -635,7 +634,7 @@ Calibration script for the OAK-FCC-3P board using DepthAI V3.
                     "extrinsics": {
                         "to_cam": "CAM_B",
                         "specTranslation": {
-                            "x": 9,
+                            "x": 10.0619,
                             "y": 0,
                             "z": 0
                         },
@@ -654,8 +653,8 @@ Calibration script for the OAK-FCC-3P board using DepthAI V3.
                     "extrinsics": {
                         "to_cam": "CAM_A",
                         "specTranslation": {
-                            "x": 0,
-                            "y": -7.01,
+                            "x": -1.02,
+                            "y": -8.1405,
                             "z": 0
                         },
                         "rotation":{
@@ -701,13 +700,13 @@ Calibration script for the OAK-FCC-3P board using DepthAI V3.
     }
     ```
 
-7. Run the calibration script to calibrate the stereo and RGB cameras.
+5. Run the calibration script to calibrate the stereo and RGB cameras.
 
     ```bash
     python3 calibrate_depthai_v3.py -s 2.44 -brd OAK-FFC-3P-HQ113.json -nx 12 -ny 9 --ssh-preview --debug-vis
     ```
 
-8. Alternatively you can run the script of a previously captured dataset.
+6. You can run the script of a saved image captured dataset.
 
    This expects a folder structure like:
 
