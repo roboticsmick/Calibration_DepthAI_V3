@@ -7,12 +7,6 @@ Tested with the OAK-FFC-3P board. Other OAK boards may require adjustments to th
 ![Live calibration stream example](assets/calibration_live_feed.png)
 ![Camera calibration settings](assets/calibration_settings.png)
 
-## Prerequisites
-
-- Python 3.8+
-- OpenCV with ArUco/ChArUco support
-- A printed ChArUco calibration board mounted on a flat, rigid surface
-
 ## Installation
 
 ### 1. Set up DepthAI
