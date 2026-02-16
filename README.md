@@ -4,6 +4,9 @@ Calibration script for OAK cameras using the DepthAI V3 API. Updated from the [D
 
 Tested with the OAK-FFC-3P board. Other OAK boards may require adjustments to the board config JSON.
 
+![Live calibration stream example](assets/calibration_live_feed.png)
+![Camera calibration settings](assets/calibration_settings.png)
+
 ## Prerequisites
 
 - Python 3.8+
