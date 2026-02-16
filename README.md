@@ -84,7 +84,7 @@ The board config defines your camera layout, sensor models, and stereo pair. Cre
 
 ### Stereo + RGB example (OAK-FFC-3P)
 
-Two OV9282 mono cameras and one IMX577 color camera json setup.
+Two OV9282 mono cameras and one IMX577 color camera json setup. An example file is saved in the assets folder of this repository.
 
 ![OV9282 Stereo Mono cameras and RGB camera configuration](assets/example_json_config.png)
 
