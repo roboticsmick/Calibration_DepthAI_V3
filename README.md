@@ -293,3 +293,10 @@ If calibration passes, it is automatically flashed to the device EEPROM and save
 - **High reprojection error**: Capture more images at varied angles and distances. Ensure the board is flat.
 - **Sync failures**: If cameras fail to sync, try reducing framerate with `-fps 5`.
 - **SSH preview**: Use `--ssh-preview` over remote connections to reduce bandwidth. The preview shows marker counts instead of full marker overlays.
+
+## Sharing is caring ❤️
+
+Use as you like for your personal use. If you're rich, feel free to buy me a coffee or a [OAK 4 CS
+ Global Shutter camera](https://shop.luxonis.com/products/oak-4-cs?Sensor+=OG05B10) ❤️
+
+<a href="https://www.buymeacoffee.com/orcaengineer" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
